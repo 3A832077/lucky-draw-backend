@@ -110,7 +110,7 @@ app.post('/api/lottery/draw', async (req: Request, res: Response) => {
     // 根據機率進行抽獎
     const selectedPrize = weightedRandom(prizes as Prize[]);
 
-    // 創建中獎記錄，紀錄電話
+    // 創建中獎記錄
     await connection.execute(
       'INSERT INTO lottery_records (prize_id, name, phone) VALUES (?, ?, ?)',
       [selectedPrize.id, name, phone]
@@ -146,11 +146,10 @@ app.get('/api/lottery/records', async (req: Request, res: Response) => {
       SELECT 
         lr.id,
         lr.lottery_time,
-        p.name as participant_name,
+        lr.name as participant_name,
         pr.name as prize_name,
         pr.color as prize_color
       FROM lottery_records lr
-      JOIN participants p ON lr.participant_id = p.id
       JOIN prizes pr ON lr.prize_id = pr.id
       ORDER BY lr.lottery_time DESC
       LIMIT 50
