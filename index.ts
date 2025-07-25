@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { RowDataPacket } from 'mysql2';
 
 // 載入環境變數
 dotenv.config();
@@ -13,16 +13,9 @@ interface Prize {
   name: string;
   total_quantity: number;
   remaining_quantity: number;
-  probability: number;
   color: string;
 }
 
-interface LotteryRecord {
-  id: number;
-  participant_id: number;
-  prize_id: number;
-  lottery_time: Date;
-}
 
 // 資料庫連線
 const pool = mysql.createPool({
@@ -80,23 +73,6 @@ app.post('/api/lottery/draw', async (req: Request, res: Response) => {
   try {
     await connection.beginTransaction();
 
-    const { name, phone } = req.body;
-
-    if (!name || !phone) {
-      return res.status(400).json({ error: '姓名和電話必填' });
-    }
-
-    // 檢查是否已抽過
-    const [records] = await connection.execute<RowDataPacket[]>(
-      `SELECT id FROM lottery_records WHERE name = ? OR phone = ?`,
-      [name, phone]
-    );
-
-    if (records.length > 0) {
-      await connection.rollback();
-      return res.status(400).json({ error: 'recordExists' });
-    }
-
     // 獲取所有有剩餘數量的獎項
     const [prizes] = await connection.execute<RowDataPacket[]>(
       'SELECT * FROM prizes WHERE remaining_quantity > 0'
@@ -110,12 +86,6 @@ app.post('/api/lottery/draw', async (req: Request, res: Response) => {
     // 根據機率進行抽獎
     const selectedPrize = weightedRandom(prizes as Prize[]);
 
-    // 創建中獎記錄
-    await connection.execute(
-      'INSERT INTO lottery_records (prize_id, name, phone) VALUES (?, ?, ?)',
-      [selectedPrize.id, name, phone]
-    );
-
     // 更新獎項剩餘數量
     await connection.execute(
       'UPDATE prizes SET remaining_quantity = remaining_quantity - 1 WHERE id = ? AND remaining_quantity > 0',
@@ -124,7 +94,6 @@ app.post('/api/lottery/draw', async (req: Request, res: Response) => {
     await connection.commit();
 
     res.json({
-      participant: { name: name, phone: phone },
       prize: selectedPrize
     });
 
@@ -139,29 +108,6 @@ app.post('/api/lottery/draw', async (req: Request, res: Response) => {
   }
 });
 
-// 取得中獎記錄
-app.get('/api/lottery/records', async (req: Request, res: Response) => {
-  try {
-    const [rows] = await pool.execute<RowDataPacket[]>(`
-      SELECT 
-        lr.id,
-        lr.lottery_time,
-        lr.name as participant_name,
-        pr.name as prize_name,
-        pr.color as prize_color
-      FROM lottery_records lr
-      JOIN prizes pr ON lr.prize_id = pr.id
-      ORDER BY lr.lottery_time DESC
-      LIMIT 50
-    `);
-    
-    res.json(rows);
-  } 
-  catch (error) {
-    console.error('Error fetching lottery records:', error);
-    res.status(500).json({ error: 'Failed to fetch lottery records' });
-  }
-});
 
 // 啟動伺服器
 app.listen(PORT, () => {
