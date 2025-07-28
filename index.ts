@@ -75,7 +75,7 @@ app.post('/api/lottery/draw', async (req: Request, res: Response) => {
 
     // 獲取所有有剩餘數量的獎項
     const [prizes] = await connection.execute<RowDataPacket[]>(
-      'SELECT * FROM prizes WHERE remaining_quantity > 0'
+      'SELECT * FROM prizes WHERE remaining_quantity > 0 FOR UPDATE'
     );
 
     if (prizes.length === 0) {
